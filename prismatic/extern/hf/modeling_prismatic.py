@@ -616,6 +616,20 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
 
         return attention_maps
 
+    def attention_rollout(
+        self,
+        model_output: PrismaticCausalLMOutputWithPast,
+    ) -> torch.Tensor:
+        attention = self.process_attention_matrices(
+            self, model_output, include_cross_attention=True
+        )
+        attention_rollout = torch.eye(attention["self_attention"].shape[-1]).unsqueeze(
+            0
+        )
+        # TODO complete
+
+        return attention_rollout
+
 
 class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
     config_class: PretrainedConfig = OpenVLAConfig
