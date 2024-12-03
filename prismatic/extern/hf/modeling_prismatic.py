@@ -588,6 +588,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         self,
         model_output: PrismaticCausalLMOutputWithPast,
         include_cross_attention: bool = True,
+        head_fusion: str = "mean",
     ) -> Dict[str, torch.Tensor]:
         """
         Process and return attention matrices from model output
@@ -605,13 +606,31 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
             # Process self attention - shape [batch, num_heads, seq_len, seq_len]
             self_attention = torch.stack(model_output.raw_self_attentions)
             # Average across heads
-            self_attention = self_attention.mean(dim=2)
+            if head_fusion == "mean":
+                self_attention = self_attention.mean(dim=2)
+            elif head_fusion == "max":
+                self_attention = self_attention.max(dim=2).values
+            elif head_fusion == "min":
+                self_attention = self_attention.min(dim=2).values
+            else:
+                raise ValueError(
+                    f"Invalid head fusion method: {head_fusion}. Must be one of ['mean', 'max', 'min']"
+                )
             attention_maps["self_attention"] = self_attention
 
         if include_cross_attention and model_output.raw_cross_attentions is not None:
             # Process cross attention if available
             cross_attention = torch.stack(model_output.raw_cross_attentions)
-            cross_attention = cross_attention.mean(dim=2)
+            if head_fusion == "mean":
+                cross_attention = cross_attention.mean(dim=2)
+            elif head_fusion == "max":
+                cross_attention = cross_attention.max(dim=2).values
+            elif head_fusion == "min":
+                cross_attention = cross_attention.min(dim=2).values
+            else:
+                raise ValueError(
+                    f"Invalid head fusion method: {head_fusion}. Must be one of ['mean', 'max', 'min']"
+                )
             attention_maps["cross_attention"] = cross_attention
 
         return attention_maps
@@ -619,16 +638,26 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
     def attention_rollout(
         self,
         model_output: PrismaticCausalLMOutputWithPast,
+        head_fusion: str = "mean",
     ) -> torch.Tensor:
-        attention = self.process_attention_matrices(
-            self, model_output, include_cross_attention=True
+        attention_matrices = self.process_attention_matrices(
+            model_output, include_cross_attention=True, head_fusion=head_fusion
         )
-        attention_rollout = torch.eye(attention["self_attention"].shape[-1]).unsqueeze(
-            0
-        )
-        # TODO complete
 
-        return attention_rollout
+        device = attention_matrices["self_attention"].device
+        I = (
+            torch.eye(attention_matrices["self_attention"].shape[-1])
+            .unsqueeze(0)
+            .to(device)
+        )  # noqa: E741
+
+        A = 0.5 * (attention_matrices["self_attention"][0] + I).to(device)  # noqa: E741
+        rollout = A / A.sum(axis=-1, keepdims=True)
+        for attention_matrix in attention_matrices["self_attention"][1:]:
+            A = 0.5 * (attention_matrix + I)
+            rollout = rollout @ (A / A.sum(axis=-1, keepdims=True))
+
+        return rollout
 
 
 class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
