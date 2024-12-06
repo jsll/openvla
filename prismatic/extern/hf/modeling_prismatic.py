@@ -74,9 +74,7 @@ class PrismaticVisionBackbone(nn.Module):
         # [Contract] Validate number of (fused) vision backbones, create "alpha" featurizer and Instantiate
         #   =>> Note :: Monkey-Patch the `forward()` function of the backbone to ensure FSDP-compatibility
         #               Hardcodes `get_intermediate_layers` to return the **SECOND-TO-LAST** layer patches!
-        assert (
-            len(timm_model_ids) <= 2
-        ), "Prismatic models only support up to 2 (fused) vision backbones!"
+        assert len(timm_model_ids) <= 2, "Prismatic models only support up to 2 (fused) vision backbones!"
         self.featurizer = timm.create_model(
             timm_model_ids[0],
             pretrained=False,
@@ -133,9 +131,7 @@ class PrismaticVisionBackbone(nn.Module):
 
 # === Prismatic Projector (nn.Module) Definitions ===
 class PrismaticProjector(nn.Module):
-    def __init__(
-        self, use_fused_vision_backbone: bool, vision_dim: int, llm_dim: int
-    ) -> None:
+    def __init__(self, use_fused_vision_backbone: bool, vision_dim: int, llm_dim: int) -> None:
         super().__init__()
         self.use_fused_vision_backbone = use_fused_vision_backbone
         self.vision_dim, self.llm_dim = vision_dim, llm_dim
@@ -178,9 +174,7 @@ class PrismaticCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = (
-        None  # Add cross attention output
-    )
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None  # Add cross attention output
     # Add raw attention tensor outputs
     raw_self_attentions: Optional[List[torch.FloatTensor]] = None
     raw_cross_attentions: Optional[List[torch.FloatTensor]] = None
@@ -240,9 +234,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
                 "if you urgently need support for latest TIMM versions."
             )
 
-        if (transformers.__version__ != "4.40.1") or (
-            tokenizers.__version__ != "0.19.1"
-        ):
+        if (transformers.__version__ != "4.40.1") or (tokenizers.__version__ != "0.19.1"):
             logger.warning(
                 f"Expected `transformers==4.40.1` and `tokenizers==0.19.1` but got "
                 f"`transformers=={transformers.__version__}` and `tokenizers=={tokenizers.__version__}`; "
@@ -302,9 +294,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
     ) -> nn.Embedding:
-        updated_embeddings = self.language_model.resize_token_embeddings(
-            new_num_tokens, pad_to_multiple_of
-        )
+        updated_embeddings = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
 
         # Update config/instance variables
         self.config.text_config.vocab_size = updated_embeddings.num_embeddings
@@ -329,24 +319,12 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         save_attention: bool = False,  # Add parameter to control attention saving
     ) -> Union[Tuple, PrismaticCausalLMOutputWithPast]:
         """Run a forward pass through the VLM, returning a PrismaticCausalLMOutputWithPast instance."""
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        output_projector_features = (
-            output_projector_features
-            if output_projector_features is not None
-            else False
-        )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        output_projector_features = output_projector_features if output_projector_features is not None else False
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Respect `use_cache` only if not training (even if `gradient_checkpointing` is off)
         use_cache = use_cache and not self.training
@@ -361,15 +339,9 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
 
         # === Handle Generation with Cache (`input_ids.shape[1] == 1`) =>> requires `past_keys_values` ===
         if input_ids.shape[1] == 1:
-            assert (
-                input_ids.shape[0] == 1
-            ), "Generation is only currently supported for batch size of 1!"
-            assert (
-                past_key_values is not None
-            ), "You must provide `past_key_values` during cached generation!"
-            assert (
-                labels is None
-            ), "Unexpected key `labels` provided during cached generation!"
+            assert input_ids.shape[0] == 1, "Generation is only currently supported for batch size of 1!"
+            assert past_key_values is not None, "You must provide `past_key_values` during cached generation!"
+            assert labels is None, "Unexpected key `labels` provided during cached generation!"
 
             language_model_output = self.language_model(
                 input_ids=input_ids,
@@ -386,12 +358,8 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
 
         # === Handle Unimodal Forward ===
         elif pixel_values is None:
-            assert (input_ids is not None) and (
-                inputs_embeds is None
-            ), "Missing `input_ids` in language-only forward!"
-            assert (
-                past_key_values is None
-            ), "Unexpected key `past_key_values` provided during language-only forward!"
+            assert (input_ids is not None) and (inputs_embeds is None), "Missing `input_ids` in language-only forward!"
+            assert past_key_values is None, "Unexpected key `past_key_values` provided during language-only forward!"
 
             language_model_output = self.language_model(
                 input_ids=input_ids,
@@ -407,12 +375,8 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
             )
 
         # === Handle Multimodal Forward ===
-        elif (input_ids.shape[0] == pixel_values.shape[0]) or (
-            inputs_embeds.shape[0] == pixel_values.shape[0]
-        ):
-            assert (
-                past_key_values is None
-            ), "Unexpected key `past_key_values` provided during language-only forward!"
+        elif (input_ids.shape[0] == pixel_values.shape[0]) or (inputs_embeds.shape[0] == pixel_values.shape[0]):
+            assert past_key_values is None, "Unexpected key `past_key_values` provided during language-only forward!"
 
             # Visual Feature Extraction
             patch_features = self.vision_backbone(pixel_values)
@@ -466,9 +430,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
                     dtype=labels.dtype,
                     device=labels.device,
                 )
-                multimodal_labels = torch.cat(
-                    [labels[:, :1], projected_patch_labels, labels[:, 1:]], dim=1
-                )
+                multimodal_labels = torch.cat([labels[:, :1], projected_patch_labels, labels[:, 1:]], dim=1)
 
             # Dispatch to Language Model
             language_model_output = self.language_model(
@@ -485,12 +447,8 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
             )
 
         # === Otherwise =>> Assume Invalid! ===
-        elif (input_ids.shape[0] != pixel_values.shape[0]) or (
-            inputs_embeds.shape[0] != pixel_values.shape[0]
-        ):
-            raise ValueError(
-                "Non-homogenous batch of (text, image) input -- forward() does not support mixed batches!"
-            )
+        elif (input_ids.shape[0] != pixel_values.shape[0]) or (inputs_embeds.shape[0] != pixel_values.shape[0]):
+            raise ValueError("Non-homogenous batch of (text, image) input -- forward() does not support mixed batches!")
 
         else:
             raise ValueError(
@@ -509,19 +467,13 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
 
         if save_attention and hasattr(language_model_output, "attentions"):
             # Get raw attention tensors from all layers
-            raw_self_attentions = [
-                attn.detach() for attn in language_model_output.attentions
-            ]
+            raw_self_attentions = [attn.detach() for attn in language_model_output.attentions]
             if hasattr(language_model_output, "cross_attentions"):
-                raw_cross_attentions = [
-                    attn.detach() for attn in language_model_output.cross_attentions
-                ]
+                raw_cross_attentions = [attn.detach() for attn in language_model_output.cross_attentions]
 
             # Unpack `language_model_output` and return PrismaticCausalLMOutputWithPast (or tuple if not `return_dict`)
             if not return_dict:
-                if output_projector_features and (
-                    projected_patch_embeddings is not None
-                ):
+                if output_projector_features and (projected_patch_embeddings is not None):
                     return *language_model_output, projected_patch_embeddings
 
                 return language_model_output
@@ -554,9 +506,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         if ((input_ids is not None) and (input_ids.shape[0] > 1)) or (
             (inputs_embeds is not None) and (inputs_embeds.shape[0] > 1)
         ):
-            raise ValueError(
-                "Generation with batch size > 1 is not currently supported!"
-            )
+            raise ValueError("Generation with batch size > 1 is not currently supported!")
 
         # Handle `past_key_values` (cache) =>> assume `input_ids` just has unprocessed tokens
         if past_key_values is not None:
@@ -605,55 +555,64 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         if model_output.raw_self_attentions is not None:
             # Process self attention - shape [batch, num_heads, seq_len, seq_len]
             self_attention = torch.stack(model_output.raw_self_attentions)
+            # print("self_attention shape: ", self_attention.shape)
             # Average across heads
-            if head_fusion == "mean":
-                self_attention = self_attention.mean(dim=2)
-            elif head_fusion == "max":
-                self_attention = self_attention.max(dim=2).values
-            elif head_fusion == "min":
-                self_attention = self_attention.min(dim=2).values
-            else:
-                raise ValueError(
-                    f"Invalid head fusion method: {head_fusion}. Must be one of ['mean', 'max', 'min']"
-                )
+            self_attention = self.combine_attention_heads(self_attention, head_fusion, dim=2)
+            # Swap axes from [num_layuers, batch, seq_len, seq_len] to [batch, num_layuers, seq_len, seq_len]
+            self_attention = self_attention.permute(1, 0, 2, 3)
             attention_maps["self_attention"] = self_attention
 
         if include_cross_attention and model_output.raw_cross_attentions is not None:
             # Process cross attention if available
             cross_attention = torch.stack(model_output.raw_cross_attentions)
-            if head_fusion == "mean":
-                cross_attention = cross_attention.mean(dim=2)
-            elif head_fusion == "max":
-                cross_attention = cross_attention.max(dim=2).values
-            elif head_fusion == "min":
-                cross_attention = cross_attention.min(dim=2).values
-            else:
-                raise ValueError(
-                    f"Invalid head fusion method: {head_fusion}. Must be one of ['mean', 'max', 'min']"
-                )
+
+            cross_attention = self.combine_attention_heads(cross_attention, head_fusion, dim=2)
+            # Swap axes from [num_layuers, batch, seq_len, seq_len] to [batch, num_layuers, seq_len, seq_len]
+            cross_attention = cross_attention.permute(1, 0, 2, 3)
+
             attention_maps["cross_attention"] = cross_attention
 
         return attention_maps
 
-    def attention_rollout(
-        self,
-        model_output: PrismaticCausalLMOutputWithPast,
-        head_fusion: str = "mean",
+    def combine_attention_heads(
+        self, attention_matrix: torch.Tensor, head_fusion: str = "mean", dim: int = 1
     ) -> torch.Tensor:
-        attention_matrices = self.process_attention_matrices(
-            model_output, include_cross_attention=True, head_fusion=head_fusion
-        )
+        """
+        Combine attention heads into a single matrix
 
-        device = attention_matrices["self_attention"].device
-        I = (
-            torch.eye(attention_matrices["self_attention"].shape[-1])
-            .unsqueeze(0)
-            .to(device)
-        )  # noqa: E741
+        Args:
+            attention_matrix: Attention matrix with shape [batch, num_heads, seq_len, seq_len]
+            head_fusion: Method to combine attention heads ('mean', 'max', or 'min')
 
-        A = 0.5 * (attention_matrices["self_attention"][0] + I).to(device)  # noqa: E741
+        Returns:
+            Combined attention matrix
+        """
+        if head_fusion == "mean":
+            return attention_matrix.mean(dim=dim)
+        elif head_fusion == "max":
+            return attention_matrix.max(dim=dim).values
+        elif head_fusion == "min":
+            return attention_matrix.min(dim=dim).values
+        else:
+            raise ValueError(f"Invalid head fusion method: {head_fusion}. Must be one of ['mean', 'max', 'min']")
+
+    # def attention_rollout(
+    #    self,
+    #    model_output: PrismaticCausalLMOutputWithPast,
+    #    head_fusion: str = "mean",
+    # ) -> torch.Tensor:
+    #    attention_matrices = self.process_attention_matrices(
+    #        model_output, include_cross_attention=True, head_fusion=head_fusion
+    #    )
+
+    def attention_rollout(self, attention_matrices) -> torch.Tensor:
+        device = attention_matrices.device
+        I = torch.eye(attention_matrices.shape[-1]).unsqueeze(0).to(device)
+
+        A = 0.5 * (attention_matrices[:, 0] + I).to(device)
         rollout = A / A.sum(axis=-1, keepdims=True)
-        for attention_matrix in attention_matrices["self_attention"][1:]:
+        for attention_matrix in range(1, attention_matrices.shape[1]):
+            attention_matrix = attention_matrices[:, attention_matrix]
             A = 0.5 * (attention_matrix + I)
             rollout = rollout @ (A / A.sum(axis=-1, keepdims=True))
 
@@ -672,9 +631,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         self.bin_centers = (self.bins[:-1] + self.bins[1:]) / 2.0
 
         # Compute vocab size for de-tokenization -- revert added "multiple of"
-        self.vocab_size = (
-            self.config.text_config.vocab_size - self.config.pad_to_multiple_of
-        )
+        self.vocab_size = self.config.text_config.vocab_size - self.config.pad_to_multiple_of
 
     def predict_action(
         self,
@@ -689,33 +646,23 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             input_ids = torch.cat(
                 (
                     input_ids,
-                    torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(
-                        input_ids.device
-                    ),
+                    torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(input_ids.device),
                 ),
                 dim=1,
             )
 
         # Run VLA inference
-        generated_ids = self.generate(
-            input_ids, max_new_tokens=self.get_action_dim(unnorm_key), **kwargs
-        )
+        generated_ids = self.generate(input_ids, max_new_tokens=self.get_action_dim(unnorm_key), **kwargs)
 
         # Extract predicted action tokens and translate into (normalized) continuous actions
-        predicted_action_token_ids = (
-            generated_ids[0, -self.get_action_dim(unnorm_key) :].cpu().numpy()
-        )
+        predicted_action_token_ids = generated_ids[0, -self.get_action_dim(unnorm_key) :].cpu().numpy()
         discretized_actions = self.vocab_size - predicted_action_token_ids
-        discretized_actions = np.clip(
-            discretized_actions - 1, a_min=0, a_max=self.bin_centers.shape[0] - 1
-        )
+        discretized_actions = np.clip(discretized_actions - 1, a_min=0, a_max=self.bin_centers.shape[0] - 1)
         normalized_actions = self.bin_centers[discretized_actions]
 
         # Unnormalize actions
         action_norm_stats = self.get_action_stats(unnorm_key)
-        mask = action_norm_stats.get(
-            "mask", np.ones_like(action_norm_stats["q01"], dtype=bool)
-        )
+        mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["q01"], dtype=bool))
         action_high, action_low = (
             np.array(action_norm_stats["q99"]),
             np.array(action_norm_stats["q01"]),
@@ -728,10 +675,83 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
 
         return actions
 
+    def predict_action_with_attention(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        unnorm_key: Optional[str] = None,
+        return_attention: bool = True,
+        head_fusion: str = "mean",
+        **kwargs: str,
+    ) -> Tuple[np.ndarray, Dict[str, torch.Tensor]]:
+        """Extended version of predict_action that also returns attention matrices.
+
+        Args:
+            input_ids: Input token ids
+            unnorm_key: Optional dataset name for retrieving un-normalizing statistics
+            return_attention: Whether to return attention matrices
+            head_fusion: How to combine attention heads ('mean', 'max', or 'min')
+            **kwargs: Additional arguments passed to generate()
+
+        Returns:
+            Tuple of:
+                - Predicted actions as numpy array
+                - Dictionary containing attention matrices if return_attention=True
+        """
+        # If the special empty token ('') does not already appear after the colon (':') token in the prompt
+        # (after "OUT:" or "ASSISTANT:"), insert it to match the inputs seen at training time
+        if not torch.all(input_ids[:, -1] == 29871):
+            input_ids = torch.cat(
+                (
+                    input_ids,
+                    torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(input_ids.device),
+                ),
+                dim=1,
+            )
+
+        # Run inference with attention output enabled
+        kwargs["output_attentions"] = return_attention
+        generated_output = self.generate(
+            input_ids,
+            max_new_tokens=self.get_action_dim(unnorm_key),
+            return_dict_in_generate=True,
+            **kwargs,
+        )
+
+        # Extract predicted action tokens and translate into (normalized) continuous actions
+        predicted_action_token_ids = generated_output.sequences[0, -self.get_action_dim(unnorm_key) :].cpu().numpy()
+        discretized_actions = self.vocab_size - predicted_action_token_ids
+        discretized_actions = np.clip(discretized_actions - 1, a_min=0, a_max=self.bin_centers.shape[0] - 1)
+        normalized_actions = self.bin_centers[discretized_actions]
+
+        # Unnormalize actions
+        action_norm_stats = self.get_action_stats(unnorm_key)
+        mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["q01"], dtype=bool))
+        action_high, action_low = (
+            np.array(action_norm_stats["q99"]),
+            np.array(action_norm_stats["q01"]),
+        )
+        actions = np.where(
+            mask,
+            0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
+            normalized_actions,
+        )
+
+        attention_data = {}
+        if return_attention:
+            # Process attention matrices
+            combined_attention = self.combine_attention_matrices(generated_output.attentions)
+            attention_matrices = self.combine_attention_heads(combined_attention, head_fusion=head_fusion, dim=2)
+            # print("combined_attention.shape: ", combined_attention.shape)
+            # print("attention_matrices.shape: ", attention_matrices.shape)
+            # Optionally compute attention rollout
+            attention_rollout = self.attention_rollout(attention_matrices)
+
+            attention_data = {"attention_matrices": attention_matrices, "attention_rollout": attention_rollout}
+
+        return actions, attention_data
+
     @staticmethod
-    def _check_unnorm_key(
-        norm_stats: Dict[str, Dict[str, Any]], unnorm_key: Optional[str]
-    ) -> str:
+    def _check_unnorm_key(norm_stats: Dict[str, Dict[str, Any]], unnorm_key: Optional[str]) -> str:
         if unnorm_key is None:
             assert len(norm_stats) == 1, (
                 f"Your model was trained on more than one dataset, "
@@ -755,3 +775,42 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         """Get all the logged statistics for the given dataset."""
         unnorm_key = self._check_unnorm_key(self.norm_stats, unnorm_key)
         return self.norm_stats[unnorm_key]["action"]
+
+    def combine_attention_matrices(self, attention_outputs):
+        # Get dimensions
+        num_tokens = len(attention_outputs)
+        num_layers = len(attention_outputs[0])
+        batch_size, num_heads = attention_outputs[0][0].shape[:2]
+        # batch_size, num_heads = attention_outputs[0][0].shape[:2]
+        initial_seq_len = attention_outputs[0][0].shape[-1]
+        final_seq_len = initial_seq_len + num_tokens - 1  # -1 because first output is full matrix
+
+        # Initialize the combined attention matrix
+        combined_attention = torch.zeros((num_layers, batch_size, num_heads, final_seq_len, final_seq_len))
+
+        # Copy the first full attention matrix
+        combined_attention[:, :, :, :initial_seq_len, :initial_seq_len] = attention_outputs[0][0]
+
+        # Add subsequent token attentions
+        for i in range(num_tokens):
+            for j in range(num_layers):
+                if i == 0:
+                    combined_attention[j, :, :, :initial_seq_len, :initial_seq_len] = attention_outputs[i][j]
+                else:
+                    # Current position in the sequence
+
+                    current_attention = attention_outputs[i][j][:, :, 0, :]
+                    current_pos = current_attention.shape[-1]
+                    # print("current_attention.shape: ", current_attention.shape)
+                    # print("combined_attention.shape: ", combined_attention[j, :, :, current_pos - 1, :current_pos].shape)
+                    # print("current_pos: ", current_pos - 1)
+                    combined_attention[j, :, :, current_pos - 1, :current_pos] = current_attention
+                    # Place it in the correct position in the combined matrix
+                    # combined_attention[:, :, current_pos, : current_pos + 1] = current_attention[:, :, 0, :]
+        combined_attention = combined_attention.permute(1, 0, 2, 3, 4)
+
+        return combined_attention
+
+    # Example usage:
+    # Assuming 'output' contains your attention outputs
+    # combined_attn = combine_attention_matrices(output.attentions)
