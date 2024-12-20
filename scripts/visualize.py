@@ -56,7 +56,7 @@ def visualize_attention(
 
     # plt.colorbar(im, ax=axs_individual[-1], fraction=0.046, pad=0.04)
     # plt.tight_layout()
-    # plt.savefig(save_path + title + "_individual.png")
+    # plt.savefig(save_path + title + "_individual.svg")
 
     # Create overlay visualization figure
     fig_overlay = plt.figure(figsize=(15, 6))
@@ -86,7 +86,7 @@ def visualize_attention(
     plt.colorbar(im, ax=axs_overlay[2], fraction=0.046, pad=0.04)
 
     plt.tight_layout()
-    plt.savefig(save_path + title + "_overlay.png")
+    plt.savefig(save_path + title + "_overlay.svg")
 
     return fig_individual, fig_overlay
 
@@ -125,7 +125,7 @@ def visualize_attention_over_prompt(
         axs_individual[i].set_title(f"Token {i}")
 
     plt.tight_layout()
-    plt.savefig(save_path + title + "_individual_attention_over_prompt.png")
+    plt.savefig(save_path + title + "_individual_attention_over_prompt.svg")
     average_attention_over_language_tokens = np.asarray(attention_over_language_per_action_token).mean(0)
 
     # Create a bar plot of attention over language tokens
@@ -137,6 +137,6 @@ def visualize_attention_over_prompt(
     ax.set_xticks(range(len(x_ticks)))
     ax.set_xticklabels(x_ticks, rotation=90)
     ax.set_title("Average Attention over Language Tokens")
-    plt.savefig(save_path + title + "_average_attention_over_language_tokens.png")
+    plt.savefig(save_path + title + "_average_attention_over_language_tokens.svg")
 
     return fig_individual, fig_average
